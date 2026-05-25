@@ -8,13 +8,18 @@ export interface SheetDataForAI {
   rows: { rowIndex: number; values: string[] }[];
 }
 
+export interface ExtractSheetOptions {
+  /** 지정 시 해당 시트만 추출 (자동 필터/8개 제한 미적용) */
+  sheetNames?: string[];
+}
+
 /** 시트당 AI에 전달할 최대 행 수 (타임아웃 방지) */
 const MAX_ROWS_PER_SHEET = 50;
 
-/** 한 파일에서 파싱할 최대 시트 수 */
+/** 한 파일에서 파싱할 최대 시트 수 (자동 모드) */
 const MAX_SHEETS_TO_PARSE = 8;
 
-/** 요약·집계 시트 — 파싱 대상에서 제외 */
+/** 요약·집계 시트 — 파싱 대상에서 제외 (자동 모드) */
 const SKIP_SHEET_NAME_PATTERNS: RegExp[] = [
   /^원가계산서$/i,
   /^총괄표$/i,
@@ -36,7 +41,7 @@ function shouldSkipSheet(sheetName: string): boolean {
   return SKIP_SHEET_NAME_PATTERNS.some((pattern) => pattern.test(name));
 }
 
-/** 요약 시트 제외 + 최대 시트 수 제한 */
+/** 요약 시트 제외 + 최대 시트 수 제한 (자동 모드) */
 export function filterSheetsForParsing(
   sheets: SheetDataForAI[],
 ): SheetDataForAI[] {
@@ -45,30 +50,62 @@ export function filterSheetsForParsing(
   return candidates.slice(0, MAX_SHEETS_TO_PARSE);
 }
 
-function extractFromWorkbook(workbook: XLSX.WorkBook): SheetDataForAI[] {
-  const allSheets = workbook.SheetNames.map((sheetName, sheetIndex) => {
-    const sheet = workbook.Sheets[sheetName];
-    const rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, {
-      header: 1,
-      defval: "",
-    }) as string[][];
+function extractSheetFromWorkbook(
+  workbook: XLSX.WorkBook,
+  sheetName: string,
+  sheetIndex: number,
+): SheetDataForAI | null {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return null;
 
-    const headerRow = rawRows[0] ?? [];
-    const columnHeaders = headerRow
-      .map((cell) => String(cell ?? "").trim())
-      .filter(Boolean);
+  const rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, {
+    header: 1,
+    defval: "",
+  }) as string[][];
 
-    const rows = rawRows
-      .slice(1)
-      .map((cells, idx) => ({
-        rowIndex: idx + 2,
-        values: cells.map((cell) => String(cell ?? "").trim()),
-      }))
-      .filter((row) => isNonEmptyRow(row.values))
-      .slice(0, MAX_ROWS_PER_SHEET);
+  const headerRow = rawRows[0] ?? [];
+  const columnHeaders = headerRow
+    .map((cell) => String(cell ?? "").trim())
+    .filter(Boolean);
 
-    return { sheetName, sheetIndex, columnHeaders, rows };
-  }).filter((sheet) => sheet.rows.length > 0);
+  const rows = rawRows
+    .slice(1)
+    .map((cells, idx) => ({
+      rowIndex: idx + 2,
+      values: cells.map((cell) => String(cell ?? "").trim()),
+    }))
+    .filter((row) => isNonEmptyRow(row.values))
+    .slice(0, MAX_ROWS_PER_SHEET);
+
+  if (rows.length === 0) return null;
+
+  return { sheetName, sheetIndex, columnHeaders, rows };
+}
+
+function extractFromWorkbook(
+  workbook: XLSX.WorkBook,
+  options?: ExtractSheetOptions,
+): SheetDataForAI[] {
+  const targetNames = options?.sheetNames?.map((n) => n.trim()).filter(Boolean);
+
+  if (targetNames && targetNames.length > 0) {
+    const nameSet = new Set(targetNames);
+    const sheets: SheetDataForAI[] = [];
+
+    for (let i = 0; i < workbook.SheetNames.length; i++) {
+      const sheetName = workbook.SheetNames[i];
+      if (!nameSet.has(sheetName)) continue;
+
+      const extracted = extractSheetFromWorkbook(workbook, sheetName, i);
+      if (extracted) sheets.push(extracted);
+    }
+
+    return sheets;
+  }
+
+  const allSheets = workbook.SheetNames.map((sheetName, sheetIndex) =>
+    extractSheetFromWorkbook(workbook, sheetName, sheetIndex),
+  ).filter((s): s is SheetDataForAI => s != null);
 
   return filterSheetsForParsing(allSheets);
 }
@@ -77,6 +114,7 @@ function extractFromWorkbook(workbook: XLSX.WorkBook): SheetDataForAI[] {
 export function extractSheetDataFromBuffer(
   buffer: ArrayBuffer,
   fileName: string,
+  options?: ExtractSheetOptions,
 ): SheetDataForAI[] {
   const ext = fileName.split(".").pop()?.toLowerCase();
 
@@ -97,18 +135,23 @@ export function extractSheetDataFromBuffer(
       .filter((row) => isNonEmptyRow(row.values))
       .slice(0, MAX_ROWS_PER_SHEET);
 
-    return [
-      {
-        sheetName: "Sheet1",
-        sheetIndex: 0,
-        columnHeaders,
-        rows,
-      },
-    ];
+    const sheet: SheetDataForAI = {
+      sheetName: "Sheet1",
+      sheetIndex: 0,
+      columnHeaders,
+      rows,
+    };
+
+    if (options?.sheetNames?.length) {
+      const allowed = new Set(options.sheetNames);
+      return allowed.has("Sheet1") && rows.length > 0 ? [sheet] : [];
+    }
+
+    return rows.length > 0 ? [sheet] : [];
   }
 
   const workbook = XLSX.read(buffer, { type: "array" });
-  return extractFromWorkbook(workbook);
+  return extractFromWorkbook(workbook, options);
 }
 
 /** OpenAI user 메시지용 compact JSON */
@@ -117,11 +160,16 @@ export function buildSheetPayloadForAI(
   fileName: string,
   projectName: string,
 ): string {
+  const note =
+    sheets.length === 1
+      ? `선택 시트 1개 · 시트당 최대 ${MAX_ROWS_PER_SHEET}행`
+      : `내역 시트 · 시트당 최대 ${MAX_ROWS_PER_SHEET}행 · 최대 ${MAX_SHEETS_TO_PARSE}개 시트`;
+
   return JSON.stringify(
     {
       project_name: projectName,
       file_name: fileName,
-      note: `내역 시트만 포함 · 시트당 최대 ${MAX_ROWS_PER_SHEET}행 · 최대 ${MAX_SHEETS_TO_PARSE}개 시트`,
+      note,
       sheets: sheets.map((s) => ({
         sheet_name: s.sheetName,
         column_headers: s.columnHeaders,

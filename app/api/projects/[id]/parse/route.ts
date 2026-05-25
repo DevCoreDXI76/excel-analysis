@@ -5,6 +5,7 @@ import {
   mapParseError,
   parseEstimateItemsFromSheets,
 } from "@/lib/openai/parse";
+import type { ParsedEstimateItemRow } from "@/lib/openai/parse";
 import { mapProjectFileRow, mapProjectRow } from "@/lib/supabase/map-row";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKET_PROJECT_FILES } from "@/lib/constants/storage";
@@ -20,6 +21,50 @@ function emptyToNull(value: string | undefined): string | null {
 function numOrNull(value: number | undefined): number | null {
   if (value == null || Number.isNaN(value)) return null;
   return value;
+}
+
+function parseSheetNames(body: Record<string, unknown>): string[] | undefined {
+  if (!Array.isArray(body.sheetNames)) return undefined;
+  const names = body.sheetNames
+    .filter((n): n is string => typeof n === "string")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  return names.length > 0 ? names : undefined;
+}
+
+function buildInsertRows(
+  parsedItems: ParsedEstimateItemRow[],
+  projectId: string,
+  fileId: string,
+  sortOffset: number,
+) {
+  return parsedItems.map((item, index) => ({
+    id: randomUUID(),
+    project_id: projectId,
+    file_id: fileId,
+    sheet_name: item.sheet_name || "Sheet1",
+    source_row_index: item.source_row_index ?? null,
+    room_name: emptyToNull(item.room_name),
+    category: emptyToNull(item.category),
+    item_name: emptyToNull(item.item_name),
+    supplied_product: emptyToNull(item.supplied_product),
+    specification: null,
+    manufacturer: emptyToNull(item.manufacturer),
+    quantity: numOrNull(item.quantity),
+    unit: emptyToNull(item.unit),
+    material_cost_unit: numOrNull(item.material_cost_unit),
+    material_cost_total: numOrNull(item.material_cost_total),
+    ingredient_cost_unit: numOrNull(item.ingredient_cost_unit),
+    ingredient_cost_total: numOrNull(item.ingredient_cost_total),
+    labor_cost_unit: numOrNull(item.labor_cost_unit),
+    labor_cost_total: numOrNull(item.labor_cost_total),
+    unit_price: null,
+    total_amount: null,
+    remark: emptyToNull(item.remarks),
+    extra_fields: item.extra_fields ?? {},
+    is_manually_edited: false,
+    sort_order: sortOffset + index,
+  }));
 }
 
 export async function POST(
@@ -41,9 +86,16 @@ export async function POST(
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
     const targetFileId =
       typeof body.fileId === "string" ? body.fileId : undefined;
+    const sheetNames = parseSheetNames(body);
+    const replaceExisting = body.replaceExisting === true;
+    const append = body.append === true;
+    const isSelectiveParse = Boolean(sheetNames?.length);
 
     const { data: projectData, error: projectError } = await supabase
       .from("projects")
@@ -88,6 +140,13 @@ export async function POST(
       );
     }
 
+    if (isSelectiveParse && !targetFileId) {
+      return NextResponse.json(
+        { error: "시트 선택 파싱에는 fileId가 필요합니다." },
+        { status: 400 },
+      );
+    }
+
     await supabase
       .from("projects")
       .update({ status: "parsing" })
@@ -105,7 +164,10 @@ export async function POST(
       const jobId = randomUUID();
       const startedAt = new Date().toISOString();
 
-      await supabase.from("project_files").update({ parse_status: "parsing" }).eq("id", file.id);
+      await supabase
+        .from("project_files")
+        .update({ parse_status: "parsing" })
+        .eq("id", file.id);
 
       await supabase.from("parse_jobs").insert({
         id: jobId,
@@ -129,10 +191,16 @@ export async function POST(
         }
 
         const buffer = await blob.arrayBuffer();
-        const sheets = extractSheetDataFromBuffer(buffer, file.fileName);
+        const sheets = extractSheetDataFromBuffer(buffer, file.fileName, {
+          sheetNames: isSelectiveParse ? sheetNames : undefined,
+        });
 
-        if (sheets.every((s) => s.rows.length === 0)) {
-          throw new Error("NO_DATA");
+        if (sheets.length === 0 || sheets.every((s) => s.rows.length === 0)) {
+          throw new Error(
+            isSelectiveParse
+              ? "선택한 시트에서 파싱할 데이터 행이 없습니다."
+              : "NO_DATA",
+          );
         }
 
         const parsedItems = await parseEstimateItemsFromSheets(sheets, {
@@ -140,38 +208,32 @@ export async function POST(
           fileName: file.fileName,
         });
 
-        await supabase
-          .from("estimate_items")
-          .delete()
-          .eq("file_id", file.id);
+        if (replaceExisting || !isSelectiveParse) {
+          await supabase
+            .from("estimate_items")
+            .delete()
+            .eq("file_id", file.id);
+        }
 
-        const insertRows = parsedItems.map((item, index) => ({
-          id: randomUUID(),
-          project_id: projectId,
-          file_id: file.id,
-          sheet_name: item.sheet_name || "Sheet1",
-          source_row_index: item.source_row_index ?? null,
-          room_name: emptyToNull(item.room_name),
-          category: emptyToNull(item.category),
-          item_name: emptyToNull(item.item_name),
-          supplied_product: emptyToNull(item.supplied_product),
-          specification: null,
-          manufacturer: emptyToNull(item.manufacturer),
-          quantity: numOrNull(item.quantity),
-          unit: emptyToNull(item.unit),
-          material_cost_unit: numOrNull(item.material_cost_unit),
-          material_cost_total: numOrNull(item.material_cost_total),
-          ingredient_cost_unit: numOrNull(item.ingredient_cost_unit),
-          ingredient_cost_total: numOrNull(item.ingredient_cost_total),
-          labor_cost_unit: numOrNull(item.labor_cost_unit),
-          labor_cost_total: numOrNull(item.labor_cost_total),
-          unit_price: null,
-          total_amount: null,
-          remark: emptyToNull(item.remarks),
-          extra_fields: item.extra_fields ?? {},
-          is_manually_edited: false,
-          sort_order: index,
-        }));
+        let sortOffset = 0;
+        if (append) {
+          const { data: maxSort } = await supabase
+            .from("estimate_items")
+            .select("sort_order")
+            .eq("file_id", file.id)
+            .order("sort_order", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          sortOffset = (maxSort?.sort_order ?? -1) + 1;
+        }
+
+        const insertRows = buildInsertRows(
+          parsedItems,
+          projectId,
+          file.id,
+          sortOffset,
+        );
 
         const { error: insertError } = await supabase
           .from("estimate_items")
@@ -199,6 +261,20 @@ export async function POST(
 
         totalExtracted += parsedItems.length;
         parsedFileIds.push(file.id);
+
+        if (isSelectiveParse) {
+          await supabase
+            .from("projects")
+            .update({ status: "parsed" })
+            .eq("id", projectId);
+
+          return NextResponse.json({
+            rowsExtracted: parsedItems.length,
+            sheetName: sheetNames![0],
+            sheetNames: sheetNames,
+            fileId: file.id,
+          });
+        }
       } catch (fileError) {
         const errorMessage =
           fileError instanceof Error && fileError.message === "NO_DATA"
@@ -220,6 +296,21 @@ export async function POST(
           .from("project_files")
           .update({ parse_status: "failed" })
           .eq("id", file.id);
+
+        if (isSelectiveParse) {
+          await supabase
+            .from("projects")
+            .update({ status: "failed" })
+            .eq("id", projectId);
+
+          return NextResponse.json(
+            {
+              error: errorMessage,
+              sheetName: sheetNames?.[0],
+            },
+            { status: 500 },
+          );
+        }
       }
     }
 

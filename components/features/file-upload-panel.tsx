@@ -1,22 +1,26 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileSpreadsheet, Loader2, Sparkles } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2 } from "lucide-react";
+import { SheetParseSelector } from "@/components/features/sheet-parse-selector";
 import type { ProjectFile } from "@/types/project";
+import { readSheetNamesFromFile } from "@/lib/excel/read-sheet-names";
 import { cn } from "@/lib/utils/cn";
-import {
-  getParseApiErrorMessage,
-  readParseApiResponse,
-} from "@/lib/utils/parse-api-response";
 
 interface FileUploadPanelProps {
   projectId: string;
   files: ProjectFile[];
 }
 
-type PanelPhase = "idle" | "uploading" | "parsing";
+type UploadPhase = "idle" | "reading" | "uploading";
+
+interface PendingUpload {
+  fileName: string;
+  sheetNames: string[];
+  fileId: string | null;
+}
 
 function formatFileSize(bytes: number | null): string {
   if (bytes == null) return "-";
@@ -27,69 +31,76 @@ function formatFileSize(bytes: number | null): string {
 
 export function FileUploadPanel({ projectId, files }: FileUploadPanelProps) {
   const router = useRouter();
-  const [phase, setPhase] = useState<PanelPhase>("idle");
+  const [phase, setPhase] = useState<UploadPhase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(
+    null,
+  );
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+
+  const selectedFile = useMemo(
+    () => files.find((f) => f.id === selectedFileId) ?? null,
+    [files, selectedFileId],
+  );
+
+  const activeSheetNames = useMemo(() => {
+    if (pendingUpload) return pendingUpload.sheetNames;
+    if (selectedFile?.sheets?.length) {
+      return selectedFile.sheets.map((s) => s.sheetName);
+    }
+    return [];
+  }, [pendingUpload, selectedFile]);
+
+  const activeFileId = pendingUpload?.fileId ?? selectedFileId;
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
       if (acceptedFiles.length === 0) return;
+      const file = acceptedFiles[0];
       setError(null);
-      setSuccess(null);
-      setPhase("uploading");
+      setSelectedFileId(null);
+      setPhase("reading");
 
-      for (const file of acceptedFiles) {
+      try {
+        const sheetNames = await readSheetNamesFromFile(file);
+        setPendingUpload({
+          fileName: file.name,
+          sheetNames,
+          fileId: null,
+        });
+        setPhase("uploading");
+
         const formData = new FormData();
         formData.append("file", file);
 
-        try {
-          const res = await fetch(`/api/projects/${projectId}/upload`, {
-            method: "POST",
-            body: formData,
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error ?? "업로드에 실패했습니다.");
-          }
-
-          if (typeof data.fileId === "string") {
-            setPhase("parsing");
-            setSuccess(null);
-
-            const parseRes = await fetch(`/api/projects/${projectId}/parse`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fileId: data.fileId }),
-            });
-            const { data: parseData, ok: parseOk } =
-              await readParseApiResponse(parseRes);
-
-            if (!parseOk) {
-              throw new Error(
-                getParseApiErrorMessage(
-                  parseData,
-                  `${file.name} AI 파싱에 실패했습니다. "AI 파싱" 버튼으로 재시도할 수 있습니다.`,
-                ),
-              );
-            }
-
-            setSuccess(
-              `${file.name}: ${parseData.rowsExtracted ?? 0}건 추출 완료` +
-                (Array.isArray(parseData.errors) && parseData.errors.length
-                  ? ` (일부 오류 ${parseData.errors.length}건)`
-                  : ""),
-            );
-          }
-        } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "업로드에 실패했습니다.",
-          );
-          break;
+        const res = await fetch(`/api/projects/${projectId}/upload`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error ?? "업로드에 실패했습니다.");
         }
-      }
 
-      setPhase("idle");
-      router.refresh();
+        if (typeof data.fileId !== "string") {
+          throw new Error("업로드 응답에 fileId가 없습니다.");
+        }
+
+        setPendingUpload({
+          fileName: file.name,
+          sheetNames,
+          fileId: data.fileId,
+        });
+        setSelectedFileId(data.fileId);
+        router.refresh();
+      } catch (err) {
+        setPendingUpload(null);
+        setError(
+          err instanceof Error ? err.message : "업로드에 실패했습니다.",
+        );
+      } finally {
+        setPhase("idle");
+      }
     },
     [projectId, router],
   );
@@ -103,16 +114,24 @@ export function FileUploadPanel({ projectId, files }: FileUploadPanelProps) {
       ],
       "text/csv": [".csv"],
     },
+    multiple: false,
   });
 
   const busy = phase !== "idle";
+
+  const handleSelectFile = (file: ProjectFile) => {
+    if (busy) return;
+    setPendingUpload(null);
+    setSelectedFileId(file.id);
+    setError(null);
+  };
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-5 py-4">
         <h2 className="font-semibold text-gray-900">파일 업로드</h2>
         <p className="mt-0.5 text-xs text-gray-500">
-          .xlsx, .csv · 업로드 후 AI 자동 파싱
+          .xlsx, .csv · 업로드 후 시트를 선택해 AI 파싱
         </p>
       </div>
 
@@ -128,24 +147,23 @@ export function FileUploadPanel({ projectId, files }: FileUploadPanelProps) {
           )}
         >
           <input {...getInputProps()} />
-          {phase === "uploading" ? (
+          {phase === "reading" ? (
+            <>
+              <Loader2
+                className="mb-3 h-10 w-10 animate-spin text-blue-600"
+                aria-hidden
+              />
+              <p className="text-sm font-medium text-gray-700">
+                시트 목록 읽는 중...
+              </p>
+            </>
+          ) : phase === "uploading" ? (
             <>
               <Loader2
                 className="mb-3 h-10 w-10 animate-spin text-blue-600"
                 aria-hidden
               />
               <p className="text-sm font-medium text-gray-700">업로드 중...</p>
-            </>
-          ) : phase === "parsing" ? (
-            <>
-              <Sparkles
-                className="mb-3 h-10 w-10 animate-pulse text-blue-600"
-                aria-hidden
-              />
-              <p className="text-sm font-medium text-gray-700">AI 파싱 중...</p>
-              <p className="mt-1 text-xs text-gray-500">
-                최대 1~2분 소요될 수 있습니다
-              </p>
             </>
           ) : (
             <>
@@ -173,10 +191,20 @@ export function FileUploadPanel({ projectId, files }: FileUploadPanelProps) {
             {error}
           </p>
         )}
-        {success && !busy && (
-          <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-            {success}
-          </p>
+
+        {activeSheetNames.length > 0 && (
+          <SheetParseSelector
+            key={`${activeFileId ?? "pending"}-${activeSheetNames.join("\u0001")}`}
+            projectId={projectId}
+            fileId={activeFileId}
+            sheetNames={activeSheetNames}
+            disabled={phase === "uploading" || !activeFileId}
+            disabledReason={
+              phase === "uploading"
+                ? "업로드가 완료되면 파싱을 시작할 수 있습니다."
+                : undefined
+            }
+          />
         )}
 
         <div className="mt-5">
@@ -189,42 +217,49 @@ export function FileUploadPanel({ projectId, files }: FileUploadPanelProps) {
             </p>
           ) : (
             <ul className="space-y-2">
-              {files.map((file) => (
-                <li
-                  key={file.id}
-                  className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3"
-                >
-                  <FileSpreadsheet
-                    className="mt-0.5 h-5 w-5 shrink-0 text-green-600"
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {file.fileName}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(file.fileSize)}
-                      {file.parseStatus && (
-                        <span className="ml-2 text-gray-400">
-                          · {file.parseStatus}
-                        </span>
+              {files.map((file) => {
+                const isSelected =
+                  selectedFileId === file.id ||
+                  pendingUpload?.fileId === file.id;
+
+                return (
+                  <li key={file.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectFile(file)}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors",
+                        isSelected
+                          ? "border-blue-200 bg-blue-50/60"
+                          : "border-gray-100 bg-gray-50 hover:border-gray-200 hover:bg-gray-100/80",
                       )}
-                    </p>
-                    {file.sheets && file.sheets.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {file.sheets.map((sheet) => (
-                          <span
-                            key={sheet.id}
-                            className="rounded bg-white px-2 py-0.5 text-xs text-gray-600 ring-1 ring-gray-200"
-                          >
-                            {sheet.sheetName}
-                          </span>
-                        ))}
+                    >
+                      <FileSpreadsheet
+                        className="mt-0.5 h-5 w-5 shrink-0 text-green-600"
+                        aria-hidden
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {file.fileName}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(file.fileSize)}
+                          {file.parseStatus && (
+                            <span className="ml-2 text-gray-400">
+                              · {file.parseStatus}
+                            </span>
+                          )}
+                        </p>
+                        {file.sheets && file.sheets.length > 0 && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            {file.sheets.length}개 시트 · 클릭하여 재파싱
+                          </p>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

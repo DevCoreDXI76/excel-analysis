@@ -14,8 +14,20 @@ export interface ItemsListResponse {
   items: import("@/types/estimate-item").EstimateItem[];
 }
 
-/** POST /api/projects/[id]/parse 성공 응답 (일부 필드) */
+/** POST /api/projects/[id]/parse 요청 body */
+export interface ParseRequest {
+  fileId?: string;
+  sheetNames?: string[];
+  replaceExisting?: boolean;
+  append?: boolean;
+}
+
+/** POST /api/projects/[id]/parse 성공 응답 */
 export interface ParseResponse {
   rowsExtracted?: number;
+  sheetName?: string;
+  sheetNames?: string[];
+  fileId?: string;
+  filesParsed?: number;
   errors?: string[];
 }
