@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   FileSpreadsheet,
   LayoutDashboard,
   FolderKanban,
   Settings,
+  LogOut,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 
 const navItems = [
@@ -18,10 +21,33 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [displayName, setDisplayName] = useState("사용자");
+  const [initial, setInitial] = useState("?");
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      const name =
+        (user.user_metadata?.display_name as string) ||
+        user.email?.split("@")[0] ||
+        "사용자";
+      setDisplayName(name);
+      setInitial(name.charAt(0).toUpperCase());
+    });
+  }, []);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
+  };
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
   };
 
   return (
@@ -55,11 +81,20 @@ export function Sidebar() {
       <div className="border-t border-gray-200 p-4">
         <div className="flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
-            박
+            {initial}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-gray-900">박PM</p>
-            <p className="text-xs text-gray-500">프로젝트 PM</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-gray-900">
+              {displayName}
+            </p>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"
+            >
+              <LogOut className="h-3 w-3" aria-hidden />
+              로그아웃
+            </button>
           </div>
         </div>
       </div>

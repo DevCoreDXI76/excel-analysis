@@ -4,11 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { FileUploadPanel } from "@/components/features/file-upload-panel";
 import { AiChatPanel } from "@/components/features/ai-chat-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
-import {
-  getProjectById,
-  MOCK_FILES_BY_PROJECT,
-  MOCK_CHAT_BY_PROJECT,
-} from "@/lib/mock/projects";
+import { getProjectById } from "@/lib/data/projects";
 
 interface ProjectWorkspacePageProps {
   params: Promise<{ id: string }>;
@@ -18,14 +14,11 @@ export default async function ProjectWorkspacePage({
   params,
 }: ProjectWorkspacePageProps) {
   const { id } = await params;
-  const project = getProjectById(id);
+  const project = await getProjectById(id);
 
   if (!project) {
     notFound();
   }
-
-  const files = MOCK_FILES_BY_PROJECT[id] ?? [];
-  const chatMessages = MOCK_CHAT_BY_PROJECT[id] ?? [];
 
   return (
     <div className="flex h-full min-h-screen flex-col p-6 md:p-8">
@@ -40,15 +33,14 @@ export default async function ProjectWorkspacePage({
           <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
           <StatusBadge status={project.status} />
         </div>
-        <p className="mt-1 text-sm text-gray-600">{project.description}</p>
+        {project.description && (
+          <p className="mt-1 text-sm text-gray-600">{project.description}</p>
+        )}
       </div>
 
       <div className="grid flex-1 gap-6 lg:grid-cols-2">
-        <FileUploadPanel existingFiles={files} />
-        <AiChatPanel
-          initialMessages={chatMessages}
-          projectName={project.name}
-        />
+        <FileUploadPanel projectId={project.id} files={project.files} />
+        <AiChatPanel projectName={project.name} />
       </div>
     </div>
   );

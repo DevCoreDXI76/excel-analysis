@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import {
   getDashboardStats,
   getRecentProjects,
-} from "@/lib/mock/projects";
+} from "@/lib/data/projects";
 
-export default function DashboardPage() {
-  const stats = getDashboardStats();
-  const recentProjects = getRecentProjects(3);
+export default async function DashboardPage() {
+  const stats = await getDashboardStats();
+  const recentProjects = await getRecentProjects(3);
 
   const statCards = [
     {
@@ -43,8 +43,7 @@ export default function DashboardPage() {
         </div>
         <Link href="/projects">
           <Button className="h-11 px-5">
-            <Plus className="h-4 w-4" aria-hidden />
-            새 프로젝트 생성
+            <Plus className="h-4 w-4" aria-hidden />새 프로젝트 생성
           </Button>
         </Link>
       </div>
@@ -78,11 +77,23 @@ export default function DashboardPage() {
             전체 보기
           </Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {recentProjects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
+        {recentProjects.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-white py-12 text-center">
+            <p className="text-gray-500">아직 프로젝트가 없습니다.</p>
+            <Link
+              href="/projects"
+              className="mt-2 inline-block text-sm text-blue-600 hover:underline"
+            >
+              첫 프로젝트 만들기
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {recentProjects.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

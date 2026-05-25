@@ -2,18 +2,17 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send, Sparkles, Loader2 } from "lucide-react";
-import type { MockChatMessage } from "@/lib/mock/projects";
-import { getMockAiResponse } from "@/lib/mock/projects";
+import { getMockAiResponse } from "@/lib/mock/chat";
+import type { MockChatMessage } from "@/lib/mock/chat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
 interface AiChatPanelProps {
-  initialMessages: MockChatMessage[];
   projectName: string;
 }
 
-export function AiChatPanel({ initialMessages, projectName }: AiChatPanelProps) {
-  const [messages, setMessages] = useState<MockChatMessage[]>(initialMessages);
+export function AiChatPanel({ projectName }: AiChatPanelProps) {
+  const [messages, setMessages] = useState<MockChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,7 +80,7 @@ export function AiChatPanel({ initialMessages, projectName }: AiChatPanelProps) 
               AI에게 분석을 요청해 보세요.
             </p>
             <p className="mt-1 text-xs text-gray-400">
-              예: 「공사내역서 요약해 줘」
+              예: 「공사내역서 요약해 줘」(Phase 4 OpenAI 연동 예정)
             </p>
           </div>
         )}
@@ -145,7 +144,7 @@ export function AiChatPanel({ initialMessages, projectName }: AiChatPanelProps) 
           </Button>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          Enter 전송 · Shift+Enter 줄바꿈 · Mock 응답 (API 미연동)
+          Enter 전송 · Shift+Enter 줄바꿈 · Mock 응답 (Phase 4 API 연동)
         </p>
       </div>
     </div>

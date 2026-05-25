@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils/cn";
-import type { ProjectStatus } from "@/lib/mock/projects";
+import type { ProjectStatus } from "@/types/project";
 
 const statusConfig: Record<
   ProjectStatus,

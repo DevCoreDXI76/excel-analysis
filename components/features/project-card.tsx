@@ -1,10 +1,18 @@
 import Link from "next/link";
 import { FileSpreadsheet, ChevronRight } from "lucide-react";
-import type { MockProject } from "@/lib/mock/projects";
+import type { Project } from "@/types/project";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 interface ProjectCardProps {
-  project: MockProject;
+  project: Project;
+}
+
+function formatDate(iso: string): string {
+  try {
+    return iso.slice(0, 10);
+  } catch {
+    return iso;
+  }
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
@@ -26,16 +34,18 @@ export function ProjectCard({ project }: ProjectCardProps) {
               {project.name}
             </h3>
             <p className="mt-0.5 text-xs text-gray-500">
-              {project.updatedAt} 업데이트
+              {formatDate(project.updatedAt)} 업데이트
             </p>
           </div>
         </div>
         <StatusBadge status={project.status} />
       </div>
 
-      <p className="mt-3 line-clamp-2 text-sm text-gray-600">
-        {project.description}
-      </p>
+      {project.description && (
+        <p className="mt-3 line-clamp-2 text-sm text-gray-600">
+          {project.description}
+        </p>
+      )}
 
       <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
         <span className="text-xs text-gray-500">

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import type { Project, ProjectStatus } from "@/types/project";
 import { ProjectCard } from "@/components/features/project-card";
+import { CreateProjectModal } from "@/components/features/create-project-modal";
 import { Button } from "@/components/ui/button";
-import { MOCK_PROJECTS } from "@/lib/mock/projects";
 import { cn } from "@/lib/utils/cn";
 
 type FilterTab = "all" | "inProgress" | "completed";
@@ -16,21 +16,33 @@ const tabs: { id: FilterTab; label: string }[] = [
   { id: "completed", label: "완료" },
 ];
 
-function filterProjects(tab: FilterTab) {
-  if (tab === "all") return MOCK_PROJECTS;
+function filterProjects(projects: Project[], tab: FilterTab): Project[] {
+  if (tab === "all") return projects;
   if (tab === "completed")
-    return MOCK_PROJECTS.filter((p) => p.status === "completed");
-  return MOCK_PROJECTS.filter(
+    return projects.filter((p) => p.status === "completed");
+  return projects.filter(
     (p) =>
       p.status === "ready" ||
       p.status === "analyzing" ||
-      p.status === "draft",
+      p.status === "draft" ||
+      p.status === "failed",
   );
 }
 
-export default function ProjectsPage() {
+interface ProjectsPageClientProps {
+  initialProjects: Project[];
+}
+
+export function ProjectsPageClient({
+  initialProjects,
+}: ProjectsPageClientProps) {
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
-  const projects = filterProjects(activeTab);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const projects = useMemo(
+    () => filterProjects(initialProjects, activeTab),
+    [initialProjects, activeTab],
+  );
 
   return (
     <div className="p-6 md:p-8">
@@ -43,9 +55,7 @@ export default function ProjectsPage() {
         </div>
         <Button
           className="h-11 px-5"
-          onClick={() =>
-            alert("Phase 3에서 Supabase 연동 후 프로젝트 생성 기능이 추가됩니다.")
-          }
+          onClick={() => setModalOpen(true)}
         >
           <Plus className="h-4 w-4" aria-hidden />새 프로젝트 생성
         </Button>
@@ -71,7 +81,19 @@ export default function ProjectsPage() {
 
       {projects.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white py-16 text-center">
-          <p className="text-gray-500">해당 조건의 프로젝트가 없습니다.</p>
+          <p className="text-gray-500">
+            {initialProjects.length === 0
+              ? "아직 프로젝트가 없습니다. 새 프로젝트를 만들어 보세요."
+              : "해당 조건의 프로젝트가 없습니다."}
+          </p>
+          {initialProjects.length === 0 && (
+            <Button
+              className="mt-4"
+              onClick={() => setModalOpen(true)}
+            >
+              <Plus className="h-4 w-4" aria-hidden />새 프로젝트 생성
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -81,13 +103,10 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      <p className="mt-6 text-center text-xs text-gray-400">
-        프로젝트를 클릭하면{" "}
-        <Link href="/projects/1" className="text-blue-600 hover:underline">
-          분석 워크스페이스
-        </Link>
-        로 이동합니다.
-      </p>
+      <CreateProjectModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+      />
     </div>
   );
 }

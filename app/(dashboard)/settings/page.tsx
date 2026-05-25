@@ -5,7 +5,7 @@ const settingSections = [
     icon: User,
     title: "프로필",
     description: "표시 이름, 역할(PM / 설계 / 영업) 설정",
-    status: "Phase 3 — Supabase Auth 연동 예정",
+    status: "Phase 3 — Supabase Auth 연동 완료",
   },
   {
     icon: Bell,
