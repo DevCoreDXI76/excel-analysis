@@ -1,86 +1,89 @@
 import Link from "next/link";
-import { FileSpreadsheet, BarChart3, Sparkles } from "lucide-react";
+import { Plus, FolderKanban, CheckCircle2, Loader2 } from "lucide-react";
+import { ProjectCard } from "@/components/features/project-card";
+import { Button } from "@/components/ui/button";
+import {
+  getDashboardStats,
+  getRecentProjects,
+} from "@/lib/mock/projects";
 
-export default function Home() {
+export default function DashboardPage() {
+  const stats = getDashboardStats();
+  const recentProjects = getRecentProjects(3);
+
+  const statCards = [
+    {
+      label: "전체 프로젝트",
+      value: stats.total,
+      icon: FolderKanban,
+      color: "text-blue-600 bg-blue-50",
+    },
+    {
+      label: "분석 완료",
+      value: stats.completed,
+      icon: CheckCircle2,
+      color: "text-green-600 bg-green-50",
+    },
+    {
+      label: "진행 중",
+      value: stats.inProgress,
+      icon: Loader2,
+      color: "text-amber-600 bg-amber-50",
+    },
+  ];
+
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 md:px-8">
-          <div className="flex items-center gap-2 font-semibold text-blue-600">
-            <FileSpreadsheet className="h-6 w-6" aria-hidden />
-            <span>AI 엑셀 분석</span>
-          </div>
-          <nav className="text-sm text-gray-600">
-            <span>Phase 1 — 환경 설정 완료</span>
-          </nav>
+    <div className="p-6 md:p-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">대시보드</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            최근 분석 프로젝트와 진행 현황을 한눈에 확인하세요.
+          </p>
         </div>
-      </header>
+        <Link href="/projects">
+          <Button className="h-11 px-5">
+            <Plus className="h-4 w-4" aria-hidden />
+            새 프로젝트 생성
+          </Button>
+        </Link>
+      </div>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center px-4 py-16 md:px-8">
-        <section className="max-w-2xl">
-          <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
-            <Sparkles className="h-4 w-4" aria-hidden />
-            AI 기반 데이터 분석
-          </p>
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 md:text-5xl">
-            엑셀을 업로드하면
-            <br />
-            AI가 분석하고 차트를 만듭니다
-          </h1>
-          <p className="mt-6 text-lg leading-relaxed text-gray-600">
-            복잡한 수식 없이 .xlsx, .csv 파일만 올리면 OpenAI Code
-            Interpreter가 통계·인사이트·시각화를 자동으로 생성합니다.
-          </p>
-
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-            <Link
-              href="/upload"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-blue-600 px-6 font-medium text-white transition-colors hover:bg-blue-700"
-            >
-              분석 시작하기
-            </Link>
-            <a
-              href="/docs/03_development_plan.md"
-              className="inline-flex h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-6 font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              개발 로드맵 보기
-            </a>
-          </div>
-        </section>
-
-        <section className="mt-20 grid gap-6 sm:grid-cols-3">
-          {[
-            {
-              icon: FileSpreadsheet,
-              title: "간편 업로드",
-              desc: "드래그앤드롭으로 엑셀·CSV 파일 전송",
-            },
-            {
-              icon: Sparkles,
-              title: "AI 자동 분석",
-              desc: "Code Interpreter가 Python으로 데이터 처리",
-            },
-            {
-              icon: BarChart3,
-              title: "시각화 리포트",
-              desc: "차트와 한국어 요약을 한 화면에서 확인",
-            },
-          ].map(({ icon: Icon, title, desc }) => (
+      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+        {statCards.map(({ label, value, icon: Icon, color }) => (
+          <div
+            key={label}
+            className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+          >
             <div
-              key={title}
-              className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
+              className={`flex h-12 w-12 items-center justify-center rounded-lg ${color}`}
             >
-              <Icon className="mb-3 h-8 w-8 text-blue-600" aria-hidden />
-              <h2 className="font-semibold text-gray-900">{title}</h2>
-              <p className="mt-2 text-sm text-gray-600">{desc}</p>
+              <Icon className="h-6 w-6" aria-hidden />
             </div>
-          ))}
-        </section>
-      </main>
+            <div>
+              <p className="text-sm text-gray-500">{label}</p>
+              <p className="text-2xl font-bold text-gray-900">{value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <footer className="border-t border-gray-200 bg-white py-6 text-center text-sm text-gray-500">
-        AI 엑셀 분석 서비스 · Next.js + Supabase + OpenAI
-      </footer>
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">최근 프로젝트</h2>
+          <Link
+            href="/projects"
+            className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          >
+            전체 보기
+          </Link>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {recentProjects.map((project) => (
+            <ProjectCard key={project.id} project={project} />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

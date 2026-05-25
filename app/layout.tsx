@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Sidebar } from "@/components/Sidebar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AI 엑셀 분석",
   description:
-    "엑셀 파일을 업로드하면 AI가 자동으로 분석하고 차트와 인사이트를 제공합니다.",
+    "공사내역서·장비 견적 엑셀을 AI가 종합 분석하고 교차 비교 리포트를 제공합니다.",
 };
 
 export default function RootLayout({
@@ -28,8 +29,11 @@ export default function RootLayout({
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-gray-50 text-gray-900">
-        {children}
+      <body className="min-h-screen bg-gray-50 text-gray-900">
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 overflow-y-auto">{children}</main>
+        </div>
       </body>
     </html>
   );
