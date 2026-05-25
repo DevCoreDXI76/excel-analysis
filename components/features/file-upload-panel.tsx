@@ -6,6 +6,10 @@ import { useDropzone } from "react-dropzone";
 import { Upload, FileSpreadsheet, Loader2, Sparkles } from "lucide-react";
 import type { ProjectFile } from "@/types/project";
 import { cn } from "@/lib/utils/cn";
+import {
+  getParseApiErrorMessage,
+  readParseApiResponse,
+} from "@/lib/utils/parse-api-response";
 
 interface FileUploadPanelProps {
   projectId: string;
@@ -57,18 +61,21 @@ export function FileUploadPanel({ projectId, files }: FileUploadPanelProps) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ fileId: data.fileId }),
             });
-            const parseData = await parseRes.json();
+            const { data: parseData, ok: parseOk } =
+              await readParseApiResponse(parseRes);
 
-            if (!parseRes.ok) {
+            if (!parseOk) {
               throw new Error(
-                parseData.error ??
+                getParseApiErrorMessage(
+                  parseData,
                   `${file.name} AI 파싱에 실패했습니다. "AI 파싱" 버튼으로 재시도할 수 있습니다.`,
+                ),
               );
             }
 
             setSuccess(
               `${file.name}: ${parseData.rowsExtracted ?? 0}건 추출 완료` +
-                (parseData.errors?.length
+                (Array.isArray(parseData.errors) && parseData.errors.length
                   ? ` (일부 오류 ${parseData.errors.length}건)`
                   : ""),
             );

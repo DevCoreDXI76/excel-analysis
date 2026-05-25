@@ -8,14 +8,45 @@ export interface SheetDataForAI {
   rows: { rowIndex: number; values: string[] }[];
 }
 
-const MAX_ROWS_PER_SHEET = 100;
+/** 시트당 AI에 전달할 최대 행 수 (타임아웃 방지) */
+const MAX_ROWS_PER_SHEET = 50;
+
+/** 한 파일에서 파싱할 최대 시트 수 */
+const MAX_SHEETS_TO_PARSE = 8;
+
+/** 요약·집계 시트 — 파싱 대상에서 제외 */
+const SKIP_SHEET_NAME_PATTERNS: RegExp[] = [
+  /^원가계산서$/i,
+  /^총괄표$/i,
+  /^표지$/i,
+  /^cover$/i,
+  /^summary$/i,
+  /^목차$/i,
+  /^index$/i,
+  /^sheet\d+$/i,
+  /^시트\d+$/i,
+];
 
 function isNonEmptyRow(values: string[]): boolean {
   return values.some((v) => v.trim().length > 0);
 }
 
+function shouldSkipSheet(sheetName: string): boolean {
+  const name = sheetName.trim();
+  return SKIP_SHEET_NAME_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+/** 요약 시트 제외 + 최대 시트 수 제한 */
+export function filterSheetsForParsing(
+  sheets: SheetDataForAI[],
+): SheetDataForAI[] {
+  const detailSheets = sheets.filter((s) => !shouldSkipSheet(s.sheetName));
+  const candidates = detailSheets.length > 0 ? detailSheets : sheets;
+  return candidates.slice(0, MAX_SHEETS_TO_PARSE);
+}
+
 function extractFromWorkbook(workbook: XLSX.WorkBook): SheetDataForAI[] {
-  return workbook.SheetNames.map((sheetName, sheetIndex) => {
+  const allSheets = workbook.SheetNames.map((sheetName, sheetIndex) => {
     const sheet = workbook.Sheets[sheetName];
     const rawRows = XLSX.utils.sheet_to_json<string[]>(sheet, {
       header: 1,
@@ -38,6 +69,8 @@ function extractFromWorkbook(workbook: XLSX.WorkBook): SheetDataForAI[] {
 
     return { sheetName, sheetIndex, columnHeaders, rows };
   }).filter((sheet) => sheet.rows.length > 0);
+
+  return filterSheetsForParsing(allSheets);
 }
 
 /** Storage 버퍼 → 시트별 행 JSON (xlsx / csv) */
@@ -88,7 +121,7 @@ export function buildSheetPayloadForAI(
     {
       project_name: projectName,
       file_name: fileName,
-      note: `시트당 최대 ${MAX_ROWS_PER_SHEET}행까지 포함됩니다.`,
+      note: `내역 시트만 포함 · 시트당 최대 ${MAX_ROWS_PER_SHEET}행 · 최대 ${MAX_SHEETS_TO_PARSE}개 시트`,
       sheets: sheets.map((s) => ({
         sheet_name: s.sheetName,
         column_headers: s.columnHeaders,
@@ -103,4 +136,4 @@ export function buildSheetPayloadForAI(
   );
 }
 
-export { MAX_ROWS_PER_SHEET };
+export { MAX_ROWS_PER_SHEET, MAX_SHEETS_TO_PARSE };

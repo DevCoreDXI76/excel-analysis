@@ -9,7 +9,7 @@ import {
 } from "@/lib/excel/extract-sheet-data";
 
 const DEFAULT_MODEL = "gpt-4o-mini";
-const MAX_ROWS_PER_CHUNK = 50;
+const MAX_ROWS_PER_CHUNK = 80;
 
 /** OpenAI 응답 1건 (snake_case, 정규화 후) */
 export interface ParsedEstimateItemRow {
@@ -197,6 +197,14 @@ export function mapParseError(error: unknown): string {
   }
   if (message.includes("Invalid schema") || message.includes("response_format")) {
     return "AI 파싱 스키마 오류입니다. 관리자에게 문의하거나 잠시 후 다시 시도해 주세요.";
+  }
+  if (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("ECONNRESET") ||
+    message.includes("504")
+  ) {
+    return "AI 파싱 처리 시간이 초과되었습니다. 시트가 많은 파일은 잠시 후 다시 시도해 주세요.";
   }
 
   return `AI 파싱 중 오류가 발생했습니다. (${message})`;

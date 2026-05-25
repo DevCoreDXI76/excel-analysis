@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  getParseApiErrorMessage,
+  readParseApiResponse,
+} from "@/lib/utils/parse-api-response";
 
 interface ParseActionBarProps {
   projectId: string;
@@ -35,15 +39,17 @@ export function ParseActionBar({
         body: JSON.stringify(fileId ? { fileId } : {}),
       });
 
-      const data = await res.json();
+      const { data, ok } = await readParseApiResponse(res);
 
-      if (!res.ok) {
-        throw new Error(data.error ?? "AI 파싱에 실패했습니다.");
+      if (!ok) {
+        throw new Error(
+          getParseApiErrorMessage(data, "AI 파싱에 실패했습니다."),
+        );
       }
 
       setSuccess(
         `${data.rowsExtracted ?? 0}건의 항목을 추출했습니다.` +
-          (data.errors?.length
+          (Array.isArray(data.errors) && data.errors.length
             ? ` (일부 파일 실패: ${data.errors.length}건)`
             : ""),
       );
@@ -79,7 +85,7 @@ export function ParseActionBar({
           )}
         </Button>
         <span className="text-xs text-gray-500">
-          OpenAI Structured Output · 시트당 최대 100행
+          OpenAI Structured Output · 내역 시트 최대 8개 · 시트당 50행
         </span>
       </div>
 
