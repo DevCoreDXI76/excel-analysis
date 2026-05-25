@@ -11,7 +11,7 @@ import {
 const DEFAULT_MODEL = "gpt-4o-mini";
 const MAX_ROWS_PER_CHUNK = 50;
 
-/** OpenAI 응답 1건 (snake_case) */
+/** OpenAI 응답 1건 (snake_case, 정규화 후) */
 export interface ParsedEstimateItemRow {
   sheet_name: string;
   source_row_index: number;
@@ -30,6 +30,62 @@ export interface ParsedEstimateItemRow {
   labor_cost_total: number;
   remarks: string;
   extra_fields: Record<string, string>;
+}
+
+interface RawParsedEstimateItemRow extends Omit<
+  ParsedEstimateItemRow,
+  "extra_fields"
+> {
+  extra_fields_json: string;
+  extra_fields?: Record<string, string>;
+}
+
+function parseExtraFieldsJson(raw: string | undefined): Record<string, string> {
+  if (!raw?.trim() || raw.trim() === "{}") return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const result: Record<string, string> = {};
+      for (const [key, value] of Object.entries(
+        parsed as Record<string, unknown>,
+      )) {
+        if (value != null && String(value).trim()) {
+          result[key] = String(value);
+        }
+      }
+      return result;
+    }
+  } catch {
+    /* fall through */
+  }
+  return {};
+}
+
+function normalizeParsedItem(item: RawParsedEstimateItemRow): ParsedEstimateItemRow {
+  const extraFields =
+    item.extra_fields && Object.keys(item.extra_fields).length > 0
+      ? item.extra_fields
+      : parseExtraFieldsJson(item.extra_fields_json);
+
+  return {
+    sheet_name: item.sheet_name,
+    source_row_index: item.source_row_index,
+    room_name: item.room_name,
+    category: item.category,
+    item_name: item.item_name,
+    supplied_product: item.supplied_product,
+    manufacturer: item.manufacturer,
+    quantity: item.quantity,
+    unit: item.unit,
+    material_cost_unit: item.material_cost_unit,
+    material_cost_total: item.material_cost_total,
+    ingredient_cost_unit: item.ingredient_cost_unit,
+    ingredient_cost_total: item.ingredient_cost_total,
+    labor_cost_unit: item.labor_cost_unit,
+    labor_cost_total: item.labor_cost_total,
+    remarks: item.remarks,
+    extra_fields: extraFields,
+  };
 }
 
 function getParseModel(): string {
@@ -83,16 +139,16 @@ async function parseSheetChunk(
     throw new Error("OpenAI 응답이 비어 있습니다.");
   }
 
-  let parsed: { items: ParsedEstimateItemRow[] };
+  let parsed: { items: RawParsedEstimateItemRow[] };
   try {
-    parsed = JSON.parse(content) as { items: ParsedEstimateItemRow[] };
+    parsed = JSON.parse(content) as { items: RawParsedEstimateItemRow[] };
   } catch {
     throw new Error("OpenAI 응답 JSON 파싱에 실패했습니다.");
   }
 
-  return (parsed.items ?? []).filter(
-    (item) => item.item_name && item.item_name.trim().length > 0,
-  );
+  return (parsed.items ?? [])
+    .map(normalizeParsedItem)
+    .filter((item) => item.item_name && item.item_name.trim().length > 0);
 }
 
 /** OpenAI Structured Output으로 견적 항목 추출 (시트·행 청크) */
@@ -138,6 +194,9 @@ export function mapParseError(error: unknown): string {
     message.includes("maximum context")
   ) {
     return "파일이 너무 큽니다. 시트 또는 행 수를 줄여 주세요.";
+  }
+  if (message.includes("Invalid schema") || message.includes("response_format")) {
+    return "AI 파싱 스키마 오류입니다. 관리자에게 문의하거나 잠시 후 다시 시도해 주세요.";
   }
 
   return `AI 파싱 중 오류가 발생했습니다. (${message})`;

@@ -23,10 +23,8 @@ export const ESTIMATE_ITEMS_JSON_SCHEMA = {
           labor_cost_unit: { type: "number" },
           labor_cost_total: { type: "number" },
           remarks: { type: "string" },
-          extra_fields: {
-            type: "object",
-            additionalProperties: { type: "string" },
-          },
+          /** strict 모드: 동적 object 불가 → JSON 문자열로 수신 후 파싱 */
+          extra_fields_json: { type: "string" },
         },
         required: [
           "sheet_name",
@@ -45,10 +43,11 @@ export const ESTIMATE_ITEMS_JSON_SCHEMA = {
           "labor_cost_unit",
           "labor_cost_total",
           "remarks",
-          "extra_fields",
+          "extra_fields_json",
         ],
         additionalProperties: false,
       },
+      additionalProperties: false,
     },
   },
   required: ["items"],
@@ -80,7 +79,7 @@ export const PARSE_SYSTEM_PROMPT = `당신은 회의실·공사 견적 엑셀 �
 3. sheet_name은 입력 시트명을 그대로 사용하세요.
 4. source_row_index는 입력 rows의 source_row_index를 사용하세요.
 5. 회의실명은 시트명·병합 셀·열 값에서 추론 가능하면 room_name에 넣으세요.
-6. 매핑되지 않은 열은 extra_fields에 "열이름": "값" 형태로 넣으세요.
+6. 매핑되지 않은 열은 extra_fields_json에 JSON 객체 문자열로 넣으세요. 예: {"원본열":"값"}
 7. 숫자 필드에 값이 없으면 0을 사용하세요 (null 사용 금지).
 8. 모든 문자열 필드는 없으면 빈 문자열 ""을 사용하세요.
-9. extra_fields는 없으면 {} 빈 객체를 사용하세요.`;
+9. extra_fields_json에 추가 데이터가 없으면 "{}" 문자열을 사용하세요.`;
