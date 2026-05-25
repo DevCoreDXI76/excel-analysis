@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI 엑셀 자동 분석 및 시각화 웹 서비스
 
-## Getting Started
+엑셀(`.xlsx`) 또는 CSV(`.csv`) 파일을 업로드하면 OpenAI Code Interpreter가 데이터를 분석하고, 요약·차트를 생성하는 웹 서비스입니다.
 
-First, run the development server:
+## 기술 스택
+
+- **Next.js** (App Router) + **TypeScript** + **Tailwind CSS**
+- **Supabase** (PostgreSQL, Storage)
+- **OpenAI Assistants API** (Code Interpreter)
+- **Vercel** 배포 예정
+
+## 사전 준비
+
+- [Node.js](https://nodejs.org/) 20 LTS 이상
+- [Supabase](https://supabase.com/) 프로젝트
+- [OpenAI](https://platform.openai.com/) API 키
+
+## 시작하기
+
+### 1. 의존성 설치
+
+```bash
+npm install
+```
+
+### 2. 환경 변수 설정
+
+`.env.example`을 복사해 `.env.local`을 만들고, 본인 계정에서 발급한 키를 입력합니다.
+
+```bash
+copy .env.example .env.local
+```
+
+> `.env.local`은 Git에 커밋하지 마세요.
+
+### 3. 개발 서버 실행
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 [http://localhost:3000](http://localhost:3000) 을 엽니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 외부 서비스 연동 (GitHub · Supabase · Vercel)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+GitHub 업로드, Supabase·OpenAI 키 설정, Vercel 배포까지 **Step-by-Step** 가이드:
 
-## Learn More
+**[docs/07_environment_setup_guide.md](./docs/07_environment_setup_guide.md)**
 
-To learn more about Next.js, take a look at the following resources:
+## npm 스크립트
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| 명령 | 설명 |
+|------|------|
+| `npm run dev` | 개발 서버 실행 |
+| `npm run build` | 프로덕션 빌드 |
+| `npm run start` | 빌드 결과 실행 |
+| `npm run lint` | ESLint 검사 |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 프로젝트 구조
 
-## Deploy on Vercel
+```
+app/           # 페이지 + API Route
+components/    # UI 컴포넌트 (ui/, features/)
+lib/           # Supabase, OpenAI, 유틸
+types/         # TypeScript 타입
+hooks/         # 커스텀 React 훅
+docs/          # 프로젝트 문서
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 문서
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+자세한 설계·로드맵·코딩 규칙은 [docs/](./docs/) 폴더를 참고하세요.
+
+- [시스템 아키텍처](./docs/01_system_architecture.md)
+- [기술 스택](./docs/02_tech_stack.md)
+- [개발 계획](./docs/03_development_plan.md)
+- [코딩 가이드라인](./docs/04_coding_guideline.md)
+- [환경 설정 및 외부 연동](./docs/07_environment_setup_guide.md)
