@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import type { Project, ProjectStatus } from "@/types/project";
+import type { Project } from "@/types/project";
 import { ProjectCard } from "@/components/features/project-card";
 import { CreateProjectModal } from "@/components/features/create-project-modal";
 import { Button } from "@/components/ui/button";
@@ -13,17 +13,17 @@ type FilterTab = "all" | "inProgress" | "completed";
 const tabs: { id: FilterTab; label: string }[] = [
   { id: "all", label: "전체" },
   { id: "inProgress", label: "진행 중" },
-  { id: "completed", label: "완료" },
+  { id: "completed", label: "파싱 완료" },
 ];
 
 function filterProjects(projects: Project[], tab: FilterTab): Project[] {
   if (tab === "all") return projects;
   if (tab === "completed")
-    return projects.filter((p) => p.status === "completed");
+    return projects.filter((p) => p.status === "parsed");
   return projects.filter(
     (p) =>
       p.status === "ready" ||
-      p.status === "analyzing" ||
+      p.status === "parsing" ||
       p.status === "draft" ||
       p.status === "failed",
   );

@@ -7,8 +7,11 @@ import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
   STORAGE_BUCKET_PROJECT_FILES,
-  STORAGE_BUCKET_SETUP_HINT,
 } from "@/lib/constants/storage";
+import {
+  buildStoragePath,
+  mapStorageUploadError,
+} from "@/lib/utils/storage-path";
 
 interface ParsedSheet {
   sheetName: string;
@@ -121,14 +124,25 @@ export async function POST(
     }
 
     const fileId = randomUUID();
-    const storagePath = `${projectId}/${fileId}/${file.name}`;
+    const storagePath = buildStoragePath(projectId, fileId, ext);
     const buffer = await file.arrayBuffer();
 
     let parsedSheets: ParsedSheet[] = [];
-    if (ext === "xlsx") {
-      parsedSheets = parseExcelSheets(buffer);
-    } else {
-      parsedSheets = parseCsvSheet(new TextDecoder().decode(buffer));
+    try {
+      if (ext === "xlsx") {
+        parsedSheets = parseExcelSheets(buffer);
+      } else {
+        parsedSheets = parseCsvSheet(new TextDecoder().decode(buffer));
+      }
+    } catch (parseError) {
+      console.error("[POST /api/projects/upload] parse", parseError);
+      return NextResponse.json(
+        {
+          error:
+            "엑셀 파일을 읽을 수 없습니다. .xlsx 형식인지 확인해 주세요. (구형 .xls는 지원하지 않습니다)",
+        },
+        { status: 400 },
+      );
     }
 
     const { count: existingCount } = await supabase
@@ -136,46 +150,42 @@ export async function POST(
       .select("*", { count: "exact", head: true })
       .eq("project_id", projectId);
 
-    // Storage 업로드 — 사용자 세션 우선
-    let uploadError = (
-      await supabase.storage
+    // Storage 업로드 — API Route에서 소유권 확인 후 Service Role 사용
+    let uploadErrorMessage: string | null = null;
+    try {
+      const serviceClient = createServiceClient();
+      const { error: uploadError } = await serviceClient.storage
         .from(STORAGE_BUCKET_PROJECT_FILES)
         .upload(storagePath, buffer, {
           contentType: file.type || undefined,
           upsert: false,
-        })
-    ).error;
-
-    // Storage RLS 미설정 시 Service Role fallback (프로젝트 소유권은 위에서 확인)
-    if (uploadError) {
-      console.warn(
-        "[upload] user session storage failed, trying service role:",
-        uploadError.message,
-      );
-      console.warn(`[upload] ${STORAGE_BUCKET_SETUP_HINT}`);
-      const serviceClient = createServiceClient();
-      uploadError = (
-        await serviceClient.storage
-          .from(STORAGE_BUCKET_PROJECT_FILES)
-          .upload(storagePath, buffer, {
-            contentType: file.type || undefined,
-            upsert: false,
-          })
-      ).error;
-    }
-
-    if (uploadError) {
-      console.error("[POST /api/projects/upload]", uploadError.message);
-      if (uploadError.message.includes("Bucket not found")) {
+        });
+      uploadErrorMessage = uploadError?.message ?? null;
+    } catch (serviceError) {
+      console.error("[POST /api/projects/upload] service client", serviceError);
+      const msg =
+        serviceError instanceof Error
+          ? serviceError.message
+          : "Service Role 설정 오류";
+      if (msg.includes("Service Role")) {
         return NextResponse.json(
           {
-            error: `Storage 버킷이 없습니다. ${STORAGE_BUCKET_SETUP_HINT}`,
+            error:
+              "서버 Storage 설정이 완료되지 않았습니다. Vercel 환경 변수에 SUPABASE_SERVICE_ROLE_KEY를 추가해 주세요.",
           },
           { status: 500 },
         );
       }
+      throw serviceError;
+    }
+
+    if (uploadErrorMessage) {
+      console.error(
+        "[POST /api/projects/upload] storage",
+        uploadErrorMessage,
+      );
       return NextResponse.json(
-        { error: "파일 업로드에 실패했습니다." },
+        { error: mapStorageUploadError(uploadErrorMessage) },
         { status: 500 },
       );
     }
@@ -191,16 +201,17 @@ export async function POST(
         mime_type: file.type || null,
         sheet_count: parsedSheets.length,
         upload_order: existingCount ?? 0,
+        parse_status: "pending",
       })
       .select()
       .single();
 
     if (fileError) {
       console.error("[POST /api/projects/upload] DB insert", fileError.message);
-      return NextResponse.json(
-        { error: "파일 정보 저장에 실패했습니다." },
-        { status: 500 },
-      );
+      const dbMessage = fileError.message.includes("row-level security")
+        ? "파일 정보 저장 권한이 없습니다. Supabase DB RLS 정책을 확인해 주세요."
+        : "파일 정보 저장에 실패했습니다.";
+      return NextResponse.json({ error: dbMessage }, { status: 500 });
     }
 
     if (parsedSheets.length > 0) {

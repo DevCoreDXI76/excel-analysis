@@ -41,50 +41,41 @@
 
 ```
 Excel-Analysis/
-├── app/                          # Next.js App Router
-│   ├── layout.tsx                # 전역 레이아웃
-│   ├── page.tsx                  # 랜딩
-│   ├── globals.css
-│   ├── upload/
-│   │   └── page.tsx
-│   ├── analysis/
-│   │   └── [id]/
-│   │       └── page.tsx
-│   └── api/
-│       ├── upload/
-│       │   └── route.ts
-│       ├── analyze/
-│       │   └── route.ts
-│       └── analysis/
-│           └── [id]/
-│               └── route.ts
+├── app/
+│   ├── (auth)/login/
+│   ├── (dashboard)/projects/[id]/
+│   └── api/projects/[id]/
+│       ├── upload/route.ts
+│       ├── parse/route.ts
+│       ├── items/route.ts
+│       ├── items/[itemId]/route.ts
+│       └── export/route.ts
 ├── components/
-│   ├── ui/                       # 버튼, 입력 등 범용 UI (스타일만)
-│   │   ├── button.tsx
-│   │   └── spinner.tsx
-│   └── features/                 # 기능 단위 UI (업로드, 리포트 등)
-│       ├── file-uploader.tsx
-│       ├── analysis-report.tsx
-│       └── chart-display.tsx
+│   ├── ui/
+│   └── features/
+│       ├── file-upload-panel.tsx
+│       ├── estimate-items-table.tsx
+│       ├── parse-action-bar.tsx
+│       └── export-button.tsx
 ├── lib/
 │   ├── supabase/
-│   │   ├── client.ts             # 브라우저용
-│   │   └── server.ts             # 서버/API Route용
 │   ├── openai/
 │   │   ├── client.ts
-│   │   └── assistant.ts          # Assistant 생성·Run 로직
-│   └── utils/
-│       ├── cn.ts                 # clsx + tailwind-merge
-│       └── format.ts             # 날짜, 파일 크기 포맷
+│   │   ├── parse.ts
+│   │   └── schema.ts
+│   ├── excel/
+│   │   ├── extract-sheet-data.ts
+│   │   └── build-export-workbook.ts
+│   ├── data/
+│   └── api/verify-project.ts
 ├── types/
-│   ├── analysis.ts               # AnalysisSession, AnalysisResult
-│   └── api.ts                    # API 요청/응답 타입
-├── hooks/
-│   └── use-analysis-polling.ts   # 분석 상태 폴링
-├── docs/                         # 프로젝트 문서 (본 폴더)
-├── public/                       # 정적 파일 (로고 등)
+│   ├── estimate-item.ts
+│   ├── parse-job.ts
+│   ├── project.ts
+│   └── api.ts
+├── docs/
 ├── .env.example
-└── .env.local                    # Git 제외
+└── .env.local
 ```
 
 ### 폴더 역할 요약
@@ -107,7 +98,7 @@ Excel-Analysis/
 |------|------|------|
 | 컴포넌트 파일 | `kebab-case.tsx` | `file-uploader.tsx` |
 | 유틸·lib | `kebab-case.ts` | `format.ts` |
-| 타입 파일 | `kebab-case.ts` | `analysis.ts` |
+| 타입 파일 | `kebab-case.ts` | `estimate-item.ts` |
 | App Router 페이지 | `page.tsx`, `layout.tsx` | `app/upload/page.tsx` |
 | API Route | `route.ts` | `app/api/upload/route.ts` |
 
@@ -118,7 +109,7 @@ Excel-Analysis/
 | React 컴포넌트 | `PascalCase` | `FileUploader` |
 | 함수·변수 | `camelCase` | `uploadFile`, `sessionId` |
 | 상수 | `UPPER_SNAKE_CASE` | `MAX_FILE_SIZE` |
-| 타입·인터페이스 | `PascalCase` | `AnalysisSession` |
+| 타입·인터페이스 | `PascalCase` | `EstimateItem` |
 | DB 테이블·컬럼 | `snake_case` | `analysis_sessions`, `created_at` |
 | 환경 변수 | `UPPER_SNAKE_CASE` | `OPENAI_API_KEY` |
 
@@ -151,24 +142,17 @@ function parseData(data: unknown): AnalysisResult {
 ### 4.2 공통 타입은 `types/`에
 
 ```typescript
-// types/analysis.ts
+// types/estimate-item.ts
 
-/** 분석 세션 상태 */
-export type AnalysisStatus =
-  | 'pending'
-  | 'processing'
-  | 'completed'
-  | 'failed';
-
-/** DB analysis_sessions 테이블과 1:1 대응 */
-export interface AnalysisSession {
+/** DB estimate_items 테이블과 1:1 대응 */
+export interface EstimateItem {
   id: string;
-  fileName: string;
-  storagePath: string;
-  status: AnalysisStatus;
-  errorMessage: string | null;
-  createdAt: string;
-  updatedAt: string;
+  projectId: string;
+  itemName: string | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  isManuallyEdited: boolean;
+  // ...
 }
 ```
 
@@ -177,7 +161,7 @@ export interface AnalysisSession {
 ```typescript
 // types/api.ts
 export interface UploadResponse {
-  sessionId: string;
+  fileId: string;
   fileName: string;
 }
 
@@ -228,7 +212,7 @@ import { useDropzone } from 'react-dropzone';
 
 // 3. 내부 absolute (@/)
 import { Button } from '@/components/ui/button';
-import type { AnalysisSession } from '@/types/analysis';
+import type { EstimateItem } from '@/types/estimate-item';
 
 // 4. 상대 경로 (같은 feature 내부)
 import { UploadIcon } from './upload-icon';
@@ -248,22 +232,17 @@ import { UploadIcon } from './upload-icon';
 | 주석 O | 주석 X |
 |--------|--------|
 | 비즈니스 규칙 ("왜 10MB 제한인지") | `i++` 같은 자명한 코드 |
-| OpenAI Run 폴링 이유 | 모든 함수에 `@param` 남발 |
+| OpenAI 파싱 타임아웃 | 모든 함수에 `@param` 남발 |
 | RLS·보안 관련 주의 | 코드와 다른 오래된 주석 |
 
 ### 6.3 JSDoc 예시
 
 ```typescript
 /**
- * Supabase Storage에 업로드된 파일을 OpenAI Files API로 전송합니다.
- *
- * Code Interpreter는 OpenAI 쪽에 파일이 있어야 분석할 수 있으므로,
- * Storage → 메모리/임시 → OpenAI 순으로 전달합니다.
- *
- * @param storagePath - Supabase Storage 내 객체 경로
- * @returns OpenAI file_id
+ * Storage에서 다운로드한 xlsx 버퍼를 시트별 행 JSON으로 변환합니다.
+ * AI 파싱 API에서 OpenAI에 전달하기 전 전처리에 사용합니다.
  */
-export async function uploadFileToOpenAI(storagePath: string): Promise<string> {
+export function extractSheetDataFromBuffer(buffer: Buffer, fileName: string) {
   // ...
 }
 ```
@@ -332,11 +311,11 @@ HTTP 상태 코드:
 ### 7.3 zod 검증
 
 ```typescript
-const AnalyzeBodySchema = z.object({
-  sessionId: z.string().uuid('올바른 세션 ID가 아닙니다.'),
+const ParseBodySchema = z.object({
+  fileId: z.string().uuid().optional(),
 });
 
-const body = AnalyzeBodySchema.safeParse(await request.json());
+const body = ParseBodySchema.safeParse(await request.json());
 if (!body.success) {
   return NextResponse.json(
     { error: body.error.errors[0]?.message ?? '잘못된 요청입니다.' },
@@ -361,8 +340,8 @@ if (!body.success) {
 ### 8.2 OpenAI
 
 - `OPENAI_API_KEY`는 **`lib/openai/` + API Route** 에서만 import
-- Assistant ID는 환경 변수 또는 최초 1회 생성 후 캐시
-- Run 상태: `queued` → `in_progress` → `completed` | `failed` | `cancelled`
+- 파싱: `lib/openai/parse.ts` — Chat Completions + JSON Schema
+- Export: `lib/excel/build-export-workbook.ts` — DB 데이터 → xlsx (OpenAI 미사용)
 
 ```typescript
 // ❌ 클라이언트 컴포넌트에서 openai 직접 호출 금지
@@ -413,7 +392,7 @@ export function cn(...inputs: ClassValue[]) {
 feat: 업로드 API 및 Supabase Storage 연동
 fix: CSV MIME 타입 검증 오류 수정
 docs: 시스템 아키텍처 문서 추가
-refactor: OpenAI Run 폴링 로직 분리
+refactor: estimate-items 테이블 CRUD 분리
 chore: eslint 설정 업데이트
 ```
 

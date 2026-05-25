@@ -2,9 +2,12 @@
 export type ProjectStatus =
   | "draft"
   | "ready"
-  | "analyzing"
-  | "completed"
+  | "parsing"
+  | "parsed"
   | "failed";
+
+/** 파일별 파싱 상태 (DB project_files.parse_status) */
+export type ParseStatus = "pending" | "parsing" | "parsed" | "failed";
 
 export interface Project {
   id: string;
@@ -25,6 +28,7 @@ export interface ProjectFile {
   fileSize: number | null;
   mimeType: string | null;
   sheetCount: number | null;
+  parseStatus: ParseStatus;
   uploadOrder: number;
   createdAt: string;
   sheets?: FileSheet[];
@@ -46,6 +50,6 @@ export interface ProjectWithFiles extends Project {
 
 export interface DashboardStats {
   total: number;
-  completed: number;
+  parsed: number;
   inProgress: number;
 }

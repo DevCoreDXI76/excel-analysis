@@ -19,8 +19,8 @@ export default async function DashboardPage() {
       color: "text-blue-600 bg-blue-50",
     },
     {
-      label: "분석 완료",
-      value: stats.completed,
+      label: "파싱 완료",
+      value: stats.parsed,
       icon: CheckCircle2,
       color: "text-green-600 bg-green-50",
     },

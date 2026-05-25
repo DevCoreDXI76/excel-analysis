@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { FileUploadPanel } from "@/components/features/file-upload-panel";
-import { AiChatPanel } from "@/components/features/ai-chat-panel";
+import { EstimateItemsTable } from "@/components/features/estimate-items-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { getEstimateItemsByProjectId } from "@/lib/data/estimate-items";
 import { getProjectById } from "@/lib/data/projects";
 
 interface ProjectWorkspacePageProps {
@@ -19,6 +20,13 @@ export default async function ProjectWorkspacePage({
   if (!project) {
     notFound();
   }
+
+  const items = await getEstimateItemsByProjectId(project.id);
+
+  const itemsKey =
+    items.length > 0
+      ? items.map((i) => `${i.id}:${i.updatedAt}`).join("|")
+      : "empty";
 
   return (
     <div className="flex h-full min-h-screen flex-col p-6 md:p-8">
@@ -40,7 +48,13 @@ export default async function ProjectWorkspacePage({
 
       <div className="grid flex-1 gap-6 lg:grid-cols-2">
         <FileUploadPanel projectId={project.id} files={project.files} />
-        <AiChatPanel projectName={project.name} />
+        <EstimateItemsTable
+          key={itemsKey}
+          projectId={project.id}
+          initialItems={items}
+          hasFiles={project.files.length > 0}
+          defaultFileId={project.files[0]?.id ?? null}
+        />
       </div>
     </div>
   );

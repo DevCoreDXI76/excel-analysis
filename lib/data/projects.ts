@@ -74,12 +74,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const projects = await getProjects();
   return {
     total: projects.length,
-    completed: projects.filter((p) => p.status === "completed").length,
+    parsed: projects.filter((p) => p.status === "parsed").length,
     inProgress: projects.filter(
       (p) =>
         p.status === "ready" ||
-        p.status === "analyzing" ||
-        p.status === "draft",
+        p.status === "parsing" ||
+        p.status === "draft" ||
+        p.status === "failed",
     ).length,
   };
 }

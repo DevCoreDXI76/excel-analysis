@@ -63,6 +63,7 @@ function LoginForm() {
           password,
           options: {
             data: { display_name: displayName || email.split("@")[0] },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
         if (signUpError) throw signUpError;
@@ -207,6 +208,9 @@ function LoginForm() {
 function translateAuthError(message: string): string {
   if (message.includes("Invalid login credentials")) {
     return "이메일 또는 비밀번호가 올바르지 않습니다.";
+  }
+  if (message.includes("Email not confirmed")) {
+    return "이메일 인증이 완료되지 않았습니다. 가입 시 받은 Supabase 확인 메일의 링크를 눌러 주세요. (스팸함도 확인해 주세요)";
   }
   if (message.includes("User already registered")) {
     return "이미 가입된 이메일입니다.";

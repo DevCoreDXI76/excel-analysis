@@ -227,19 +227,22 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 저장 후 개발 서버를 **재시작**합니다 (`Ctrl+C` → `npm run dev`).
 
-### 3-4. (선택) DB 테이블 생성
+### 3-4. DB 스키마 마이그레이션 (필수)
 
-Phase 3 전에 미리 해도 됩니다.
+v2 아키텍처(`estimate_items`, `parse_jobs`)를 사용하려면 아래 SQL을 실행합니다.
 
-1. Supabase Dashboard → **SQL Editor**
-2. **New query**
-3. [06_database_schema.md](./06_database_schema.md) **12절 SQL DDL** 전체 복사 → 붙여넣기 → **Run**
+1. Supabase Dashboard → **SQL Editor** → **New query**
+2. [08_new_schema_migration.sql](./08_new_schema_migration.sql) 전체 복사 → **Run**
+3. `parse_jobs`, `estimate_items` 테이블 생성 확인
 
-### 3-5. (선택) Storage 버킷 생성
+> **주의:** `analysis_runs`, `analysis_results` 등 구 테이블 데이터는 삭제됩니다.
+
+### 3-5. Storage 버킷 생성
 
 1. 왼쪽 **Storage** → **New bucket**
 2. 이름: `project-files` → **Private** → Create
-3. 다시 **New bucket** → 이름: `analysis-assets` → **Private** → Create
+
+> 구 `analysis-assets` 버킷은 v2에서 사용하지 않습니다.
 
 ---
 
@@ -255,10 +258,10 @@ Phase 3 전에 미리 해도 됩니다.
 OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxx
 ```
 
-6. (선택) Assistant를 미리 만들었다면:
+6. (선택) 파싱 모델 변경:
 
 ```env
-OPENAI_ASSISTANT_ID=asst_xxxxxxxx
+OPENAI_PARSE_MODEL=gpt-4o
 ```
 
 ---
@@ -289,7 +292,7 @@ OPENAI_ASSISTANT_ID=asst_xxxxxxxx
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key | Production, Preview, Development |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key | Production, Preview, Development |
 | `OPENAI_API_KEY` | sk-proj-... | Production, Preview, Development |
-| `OPENAI_ASSISTANT_ID` | (있으면) | Production, Preview, Development |
+| `OPENAI_PARSE_MODEL` | (선택) gpt-4o-mini / gpt-4o | Production, Preview, Development |
 | `NEXT_PUBLIC_SITE_URL` | 배포 후 URL (아래 참고) | Production |
 
 **NEXT_PUBLIC_SITE_URL:** 첫 배포 전에는 비워두거나 `https://임시.vercel.app` — 배포 완료 후 **실제 URL**로 수정하고 Redeploy.
@@ -338,18 +341,20 @@ OPENAI_ASSISTANT_ID=asst_xxxxxxxx
 
 - [ ] 프로젝트 생성 (Seoul/Tokyo 리전)
 - [ ] 3개 키를 `.env.local`에 입력
-- [ ] (선택) SQL DDL 실행, Storage 버킷 2개 생성
+- [ ] [08_new_schema_migration.sql](./08_new_schema_migration.sql) 실행
+- [ ] Storage 버킷 `project-files` 생성
 
 ### OpenAI
 
-- [ ] API Key 발급 및 `.env.local` 입력
+- [ ] API Key 발급 및 `.env.local` / Vercel 입력
 
 ### Vercel
 
 - [ ] GitHub 저장소 Import
-- [ ] 환경 변수 6개 등록
+- [ ] 환경 변수 5~6개 등록 (`.env.example` 참고)
 - [ ] Deploy 성공, 프로덕션 URL 접속 가능
 - [ ] `NEXT_PUBLIC_SITE_URL` = 실제 Vercel URL
+- [ ] [09_e2e_checklist.md](./09_e2e_checklist.md) E2E 테스트 완료
 
 ---
 
@@ -394,7 +399,9 @@ const supabase = createClient();
 - [README.md](../README.md) — 프로젝트 개요
 - [02_tech_stack.md](./02_tech_stack.md) — 기술 스택·환경 변수 설명
 - [05_system_requirements.md](./05_system_requirements.md) — 기능 요구사항
-- [06_database_schema.md](./06_database_schema.md) — DB SQL DDL
+- [06_database_schema.md](./06_database_schema.md) — DB 스키마
+- [08_new_schema_migration.sql](./08_new_schema_migration.sql) — v2 마이그레이션 SQL
+- [09_e2e_checklist.md](./09_e2e_checklist.md) — E2E 테스트
 
 ---
 
